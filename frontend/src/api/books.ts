@@ -13,6 +13,7 @@ export interface BookFilters {
   class_grade?: string;
   book_type?: 'PDF' | 'EPUB';
   search?: string;
+  library_type?: 'school' | 'public';
 }
 
 export const booksApi = {
@@ -23,6 +24,7 @@ export const booksApi = {
     if (filters.class_grade) params.append('class_grade', filters.class_grade);
     if (filters.book_type) params.append('book_type', filters.book_type);
     if (filters.search) params.append('search', filters.search);
+    if (filters.library_type) params.append('library_type', filters.library_type);
 
     const response = await apiClient.get<PaginatedBooks>(`/books?${params.toString()}`);
     return response.data;
@@ -43,6 +45,9 @@ export const booksApi = {
     formData.append('title', metadata.title);
     formData.append('authors', metadata.authors);
     formData.append('class_grade', metadata.class_grade);
+    if (metadata.library_type) {
+      formData.append('library_type', metadata.library_type);
+    }
 
     const response = await apiClient.post<Book>('/books', formData, {
       headers: {

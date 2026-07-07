@@ -17,6 +17,7 @@ interface UploadFile {
   title: string;
   authors: string;
   classGrade: string;
+  libraryType: 'school' | 'public';
   progress: number;
   status: 'pending' | 'uploading' | 'complete' | 'error';
   error?: string;
@@ -45,6 +46,7 @@ export function AdminUploadPage() {
         title: fileName,
         authors: '',
         classGrade: '',
+        libraryType: 'public',
         progress: 0,
         status: 'pending',
       };
@@ -84,7 +86,7 @@ export function AdminUploadPage() {
     try {
       await booksApi.uploadBook(
         upload.file,
-        { title: upload.title, authors: upload.authors, class_grade: upload.classGrade },
+        { title: upload.title, authors: upload.authors, class_grade: upload.classGrade, library_type: upload.libraryType },
         (progress) => updateUpload(id, { progress })
       );
       updateUpload(id, { status: 'complete', progress: 100 });
@@ -226,7 +228,7 @@ export function AdminUploadPage() {
                         )}
 
                         {upload.status !== 'complete' && upload.status !== 'uploading' && (
-                          <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="grid gap-3 sm:grid-cols-4">
                             <div>
                               <Input
                                 placeholder="Title *"
@@ -256,6 +258,18 @@ export function AdminUploadPage() {
                                     {grade}
                                   </SelectItem>
                                 ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={upload.libraryType}
+                              onValueChange={(value) => updateUpload(upload.id, { libraryType: value as 'school' | 'public' })}
+                            >
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Library *" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="school">School Library</SelectItem>
+                                <SelectItem value="public">Public Library</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>

@@ -20,12 +20,14 @@ export interface BookMetadataCreate {
   title: string;
   authors: string;
   class_grade: string;
+  library_type?: 'school' | 'public';
 }
 
 export interface BookMetadataUpdate {
   title?: string;
   authors?: string;
   class_grade?: string;
+  library_type?: 'school' | 'public';
 }
 
 export interface PaginatedBooks {

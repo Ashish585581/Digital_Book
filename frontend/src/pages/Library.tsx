@@ -118,11 +118,27 @@ export function LibraryPage() {
   const [continueReading, setContinueReading] = useState<ContinueReadingItem[]>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<'title' | 'created_at' | 'authors'>('created_at');
+  const [schoolBookCount, setSchoolBookCount] = useState(0);
+  const [publicBookCount, setPublicBookCount] = useState(0);
 
   useEffect(() => {
     fetchBooks();
     fetchContinueReading();
+    fetchLibraryCounts();
   }, []);
+
+  const fetchLibraryCounts = async () => {
+    try {
+      const [schoolResult, publicResult] = await Promise.all([
+        booksApi.listBooks({ library_type: 'school', limit: 1 }),
+        booksApi.listBooks({ library_type: 'public', limit: 1 }),
+      ]);
+      setSchoolBookCount(schoolResult.total);
+      setPublicBookCount(publicResult.total);
+    } catch {
+      // Silently fail - counts will just be 0
+    }
+  };
 
   const fetchContinueReading = async () => {
     try {
@@ -158,10 +174,14 @@ export function LibraryPage() {
 
   const handleLibraryTypeSelect = (type: 'all' | 'school' | 'public') => {
     setLibraryView(type);
-    if (type === 'school') {
+    if (type === 'all') {
+      setFilters({ ...filters, library_type: undefined, class_grade: undefined, page: 1 });
+    } else if (type === 'school') {
       setClassGrade('');
+      setFilters({ ...filters, library_type: 'school', class_grade: undefined, page: 1 });
     } else if (type === 'public') {
       setClassGrade('General');
+      setFilters({ ...filters, library_type: 'public', class_grade: 'General', page: 1 });
     }
   };
 
@@ -354,7 +374,7 @@ export function LibraryPage() {
                     Textbooks, notes, assignments & study material.
                   </p>
                   <p className="mt-3 text-2xl font-bold text-foreground">
-                    {SCHOOL_CATEGORIES.length} <span className="text-sm font-medium text-muted-foreground">categories</span>
+                    {schoolBookCount} <span className="text-sm font-medium text-muted-foreground">books</span>
                   </p>
                 </div>
                 <div className="relative mt-2 inline-flex items-center text-sm font-medium text-emerald-600 group-hover:gap-2 transition-all">
@@ -382,7 +402,7 @@ export function LibraryPage() {
                     Novels, stories, science, history & biographies.
                   </p>
                   <p className="mt-3 text-2xl font-bold text-foreground">
-                    {PUBLIC_CATEGORIES.length} <span className="text-sm font-medium text-muted-foreground">categories</span>
+                    {publicBookCount} <span className="text-sm font-medium text-muted-foreground">books</span>
                   </p>
                 </div>
                 <div className="relative mt-2 inline-flex items-center text-sm font-medium text-amber-600 group-hover:gap-2 transition-all">
