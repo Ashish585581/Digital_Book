@@ -20,6 +20,7 @@ export interface TokenResponse {
 export interface LoginRequest {
   username: string;
   password: string;
+  expected_role?: 'student' | 'admin';
 }
 
 export interface RegisterRequest {

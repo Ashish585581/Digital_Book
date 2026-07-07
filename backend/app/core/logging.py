@@ -23,6 +23,9 @@ def setup_logging() -> None:
     # Set third-party loggers to WARNING to reduce noise
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.engine.Engine").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:

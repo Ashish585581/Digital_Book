@@ -81,3 +81,17 @@ class InvalidFileTypeException(BookLoreException):
 
     def __init__(self, message: str = "File type not allowed"):
         super().__init__("INVALID_FILE_TYPE", message, status.HTTP_400_BAD_REQUEST)
+
+
+class DatabaseException(BookLoreException):
+    """Raised when a database operation fails."""
+
+    def __init__(self, message: str = "Database unavailable"):
+        super().__init__("DATABASE_ERROR", message, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+
+class ServiceUnavailableException(BookLoreException):
+    """Raised when an external service is unavailable."""
+
+    def __init__(self, service: str = "Service", message: str = "temporarily unavailable"):
+        super().__init__("SERVICE_UNAVAILABLE", f"{service} {message}", status.HTTP_503_SERVICE_UNAVAILABLE)

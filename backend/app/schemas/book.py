@@ -4,7 +4,7 @@ Pydantic schemas for book management.
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.book_metadata import CLASS_GRADE_OPTIONS
+from app.models.book_metadata import CLASS_GRADE_OPTIONS, LIBRARY_TYPE_OPTIONS
 from app.schemas.base import BaseSchema, PaginatedResponse
 
 
@@ -13,6 +13,8 @@ class BookMetadataCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     authors: str = Field(..., min_length=1, max_length=500)
     class_grade: str = Field(..., min_length=1, max_length=20)
+    library_type: str = Field(default="public", max_length=20)
+    is_featured: bool = Field(default=False)
 
     @field_validator('class_grade')
     @classmethod
@@ -21,18 +23,34 @@ class BookMetadataCreate(BaseModel):
             raise ValueError(f"class_grade must be one of: {', '.join(CLASS_GRADE_OPTIONS)}")
         return v
 
+    @field_validator('library_type')
+    @classmethod
+    def validate_library_type(cls, v: str) -> str:
+        if v not in LIBRARY_TYPE_OPTIONS:
+            raise ValueError(f"library_type must be one of: {', '.join(LIBRARY_TYPE_OPTIONS)}")
+        return v
+
 
 class BookMetadataUpdate(BaseModel):
     """Schema for updating book metadata."""
     title: str | None = Field(None, min_length=1, max_length=500)
     authors: str | None = Field(None, min_length=1, max_length=500)
     class_grade: str | None = None
+    library_type: str | None = None
+    is_featured: bool | None = None
 
     @field_validator('class_grade')
     @classmethod
     def validate_class_grade(cls, v: str | None) -> str | None:
         if v is not None and v not in CLASS_GRADE_OPTIONS:
             raise ValueError(f"class_grade must be one of: {', '.join(CLASS_GRADE_OPTIONS)}")
+        return v
+
+    @field_validator('library_type')
+    @classmethod
+    def validate_library_type(cls, v: str | None) -> str | None:
+        if v is not None and v not in LIBRARY_TYPE_OPTIONS:
+            raise ValueError(f"library_type must be one of: {', '.join(LIBRARY_TYPE_OPTIONS)}")
         return v
 
 
@@ -42,6 +60,8 @@ class BookResponse(BaseSchema):
     title: str
     authors: str
     class_grade: str
+    library_type: str
+    is_featured: bool
     book_type: str
     thumbnail: str | None
     file_size: int

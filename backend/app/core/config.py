@@ -43,7 +43,14 @@ class Settings(BaseSettings):
     max_cover_size: int = 5 * 1024 * 1024  # 5MB
 
     # CORS
-    cors_allowed_origins: list[str] = ["http://localhost:3000"]
+    cors_allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+        "http://localhost:3004",
+        "http://localhost:3005",
+    ]
 
     # Rate Limiting
     rate_limit_login: int = 5  # per minute

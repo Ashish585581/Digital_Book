@@ -1,9 +1,16 @@
 """
 Authentication service handling login, registration, and token management.
 """
+import logging
 from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import select
+import asyncpg
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.core.security import (
     hash_password,
     verify_password,
@@ -14,12 +21,17 @@ from app.core.security import (
 from app.core.exceptions import (
     UnauthorizedException,
     ConflictException,
-    ValidationException
+    ValidationException,
+    DatabaseException,
+    ServiceUnavailableException
 )
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.schemas.auth import TokenResponse, AccessTokenResponse, UserRegister
+
+
+logger = get_logger(__name__)
 
 
 class AuthService:
@@ -63,61 +75,98 @@ class AuthService:
             name=user_data.name,
             role="student"  # Default role
         )
-        return await self._user_repo.create(user)
+        user = await self._user_repo.create(user)
+        await self._user_repo.commit()
+        return user
 
-    async def login(self, username: str, password: str) -> TokenResponse:
+    async def login(self, username: str, password: str, expected_role: str | None = None) -> TokenResponse:
         """
         Authenticate user and generate tokens.
 
         Args:
             username: Username or email
             password: Plain text password
+            expected_role: Expected role ("student" or "admin") for validation
 
         Returns:
             TokenResponse with access and refresh tokens
 
         Raises:
-            UnauthorizedException: If credentials are invalid
+            UnauthorizedException: If credentials are invalid or role mismatch
+            ServiceUnavailableException: If database is unavailable
         """
-        # Find user by username
-        user = await self._user_repo.find_by_username(username)
-        if not user:
-            # Try by email
-            user = await self._user_repo.find_by_email(username)
+        logger.info(f"Login attempt for user: {username}")
 
-        if not user or not verify_password(password, user.password_hash):
-            raise UnauthorizedException("Invalid username or password")
+        try:
+            # Find user by username
+            user = await self._user_repo.find_by_username(username)
+            if not user:
+                # Try by email
+                user = await self._user_repo.find_by_email(username)
 
-        if not user.is_active:
-            raise UnauthorizedException("Account is deactivated")
+            if not user:
+                logger.warning(f"Login failed - user not found: {username}")
+                raise UnauthorizedException("Invalid username or password")
 
-        # Update last login
-        await self._user_repo.update_last_login(user.id)
+            if not verify_password(password, user.password_hash):
+                logger.warning(f"Login failed - invalid password for user: {username}")
+                raise UnauthorizedException("Invalid username or password")
 
-        # Generate tokens
-        token_data = {
-            "sub": str(user.id),
-            "username": user.username,
-            "role": user.role
-        }
-        access_token = create_access_token(token_data)
-        refresh_token = create_refresh_token(token_data)
+            if not user.is_active:
+                logger.warning(f"Login failed - inactive user: {username}")
+                raise UnauthorizedException("Account is deactivated")
 
-        # Store refresh token
-        expires_at = datetime.utcnow() + timedelta(
-            days=settings.refresh_token_expire_days
-        )
-        await self._refresh_token_repo.create(user.id, refresh_token, expires_at)
+            # Validate role matches expected role if specified
+            if expected_role is not None:
+                if user.role != expected_role:
+                    if user.role == "admin":
+                        logger.warning(f"Login failed - wrong role (admin) for user: {username}")
+                        raise UnauthorizedException(
+                            "These credentials belong to an admin account. Please switch to Admin login."
+                        )
+                    else:
+                        logger.warning(f"Login failed - wrong role (student) for user: {username}")
+                        raise UnauthorizedException(
+                            "These credentials belong to a student account. Please switch to Student login."
+                        )
 
-        # Commit transaction
-        await self._user_repo.commit()
+            # Update last login
+            await self._user_repo.update_last_login(user.id)
 
-        return TokenResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer",
-            expires_in=settings.access_token_expire_minutes * 60
-        )
+            # Generate tokens
+            token_data = {
+                "sub": str(user.id),
+                "username": user.username,
+                "role": user.role
+            }
+            access_token = create_access_token(token_data)
+            refresh_token = create_refresh_token(token_data)
+
+            # Store refresh token
+            expires_at = datetime.utcnow() + timedelta(
+                days=settings.refresh_token_expire_days
+            )
+            await self._refresh_token_repo.create(user.id, refresh_token, expires_at)
+
+            # Commit transaction
+            await self._user_repo.commit()
+
+            logger.info(f"Login successful for user: {username}")
+            return TokenResponse(
+                access_token=access_token,
+                refresh_token=refresh_token,
+                token_type="bearer",
+                expires_in=settings.access_token_expire_minutes * 60
+            )
+
+        except (SQLAlchemyError, asyncpg.PostgresConnectionError, ConnectionRefusedError) as e:
+            logger.error(f"Database error during login for user {username}: {e}")
+            raise ServiceUnavailableException("Database", "temporarily unavailable")
+        except UnauthorizedException:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during login for user {username}: {e}", exc_info=True)
+            raise ServiceUnavailableException("Authentication", "temporarily unavailable")
 
     async def refresh_access_token(self, refresh_token: str) -> AccessTokenResponse:
         """

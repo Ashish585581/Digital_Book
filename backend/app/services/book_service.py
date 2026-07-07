@@ -26,7 +26,9 @@ class BookService:
         limit: int = 20,
         class_grade: str | None = None,
         book_type: str | None = None,
-        search: str | None = None
+        search: str | None = None,
+        library_type: str | None = None,
+        featured: bool | None = None
     ) -> tuple[list[Book], int]:
         """
         List books with pagination and filters.
@@ -37,12 +39,14 @@ class BookService:
             class_grade: Filter by class grade
             book_type: Filter by book type (PDF/EPUB)
             search: Search in title/author
+            library_type: Filter by library type (school/public)
+            featured: Filter featured books only
 
         Returns:
             Tuple of (books list, total count)
         """
         return await self._book_repo.find_all_paginated(
-            page, limit, class_grade, book_type, search
+            page, limit, class_grade, book_type, search, library_type, featured
         )
 
     async def get_book(self, book_id: int) -> Book:
@@ -133,7 +137,9 @@ class BookService:
             book_id=book.id,
             title=metadata.title,
             authors=metadata.authors,
-            class_grade=metadata.class_grade
+            class_grade=metadata.class_grade,
+            library_type=metadata.library_type,
+            is_featured=metadata.is_featured
         )
         book.book_metadata = book_metadata
 
@@ -178,6 +184,10 @@ class BookService:
                     f"class_grade must be one of: {', '.join(CLASS_GRADE_OPTIONS)}"
                 )
             book.book_metadata.class_grade = metadata.class_grade
+        if metadata.library_type is not None:
+            book.book_metadata.library_type = metadata.library_type
+        if metadata.is_featured is not None:
+            book.book_metadata.is_featured = metadata.is_featured
 
         await self._book_repo.commit()
         await self._book_repo.refresh(book)

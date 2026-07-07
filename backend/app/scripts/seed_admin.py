@@ -16,6 +16,14 @@ from app.models.user import User
 
 async def seed_admin():
     """Create the initial admin user."""
+    # Import all models to register them with SQLAlchemy
+    from app.models.user import User
+    from app.models.refresh_token import RefreshToken
+    from app.models.reading_progress import ReadingProgress
+    from app.models.audit_log import AuditLog
+    from app.models.book import Book
+    from app.models.book_metadata import BookMetadata
+
     admin_data = {
         "username": "admin",
         "email": "admin@school.edu",

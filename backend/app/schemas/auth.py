@@ -24,8 +24,23 @@ class UserRegister(BaseModel):
 
 class UserLogin(BaseModel):
     """Schema for login request."""
-    username: str
-    password: str
+    username: str = Field(..., min_length=1, max_length=50, description="Username or email")
+    password: str = Field(..., min_length=1, description="User password")
+    expected_role: str | None = Field(default=None, description="Expected role (student or admin)")
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Username cannot be empty')
+        return v.strip()
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Password cannot be empty')
+        return v
 
 
 class TokenResponse(BaseModel):

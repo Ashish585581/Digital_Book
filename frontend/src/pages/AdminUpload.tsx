@@ -1,36 +1,57 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X, FileText } from 'lucide-react';
+import { Upload, X, FileText, FileArchive, CheckCircle, AlertCircle, Loader2, BookOpen } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { useBookStore } from '@/stores/bookStore';
+import { booksApi } from '@/api/books';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Label } from '@/components/common/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/common/Select';
 import { CLASS_GRADE_OPTIONS } from '@/types/book';
+import { formatFileSize } from '@/utils/cn';
+
+interface UploadFile {
+  file: File;
+  id: string;
+  title: string;
+  authors: string;
+  classGrade: string;
+  progress: number;
+  status: 'pending' | 'uploading' | 'complete' | 'error';
+  error?: string;
+}
+
+const FileIcon = ({ type }: { type: string }) => {
+  if (type === 'application/epub+zip') {
+    return <FileArchive className="h-10 w-10 text-amber-500" />;
+  }
+  return <FileText className="h-10 w-10 text-red-500" />;
+};
 
 export function AdminUploadPage() {
   const navigate = useNavigate();
   const { uploadBook, isLoading, error } = useBookStore();
 
-  const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState('');
-  const [authors, setAuthors] = useState('');
-  const [classGrade, setClassGrade] = useState('');
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploads, setUploads] = useState<UploadFile[]>([]);
+  const [currentUploadId, setCurrentUploadId] = useState<string | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const selectedFile = acceptedFiles[0];
-      setFile(selectedFile);
+    const newFiles: UploadFile[] = acceptedFiles.map((file) => {
+      const fileName = file.name.replace(/\.[^/.]+$/, '');
+      return {
+        file,
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        title: fileName,
+        authors: '',
+        classGrade: '',
+        progress: 0,
+        status: 'pending',
+      };
+    });
 
-      // Auto-fill title from filename
-      const fileName = selectedFile.name.replace(/\.[^/.]+$/, '');
-      if (!title) {
-        setTitle(fileName);
-      }
-    }
-  }, [title]);
+    setUploads((prev) => [...prev, ...newFiles]);
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -38,149 +59,286 @@ export function AdminUploadPage() {
       'application/pdf': ['.pdf'],
       'application/epub+zip': ['.epub'],
     },
-    multiple: false,
+    multiple: true,
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const removeFile = (id: string) => {
+    setUploads((prev) => prev.filter((u) => u.id !== id));
+  };
 
-    if (!file || !title || !authors || !classGrade) {
+  const updateUpload = (id: string, updates: Partial<UploadFile>) => {
+    setUploads((prev) =>
+      prev.map((u) => (u.id === id ? { ...u, ...updates } : u))
+    );
+  };
+
+  const handleUpload = async (id: string) => {
+    const upload = uploads.find((u) => u.id === id);
+    if (!upload || !upload.title || !upload.authors || !upload.classGrade) {
       return;
     }
 
+    setCurrentUploadId(id);
+    updateUpload(id, { status: 'uploading', progress: 0 });
+
     try {
-      await uploadBook(file, title, authors, classGrade);
-      navigate('/');
-    } catch {
-      // Error handled in store
+      await booksApi.uploadBook(
+        upload.file,
+        { title: upload.title, authors: upload.authors, class_grade: upload.classGrade },
+        (progress) => updateUpload(id, { progress })
+      );
+      updateUpload(id, { status: 'complete', progress: 100 });
+    } catch (err) {
+      updateUpload(id, {
+        status: 'error',
+        error: (err as Error).message || 'Upload failed',
+      });
+    } finally {
+      setCurrentUploadId(null);
     }
   };
 
-  const clearFile = () => {
-    setFile(null);
-    setUploadProgress(0);
+  const handleUploadAll = async () => {
+    const pendingUploads = uploads.filter(
+      (u) => u.status === 'pending' && u.title && u.authors && u.classGrade
+    );
+
+    for (const upload of pendingUploads) {
+      await handleUpload(upload.id);
+    }
   };
+
+  const hasPendingUploads = uploads.some(
+    (u) => u.status === 'pending' && u.title && u.authors && u.classGrade
+  );
+
+  const allComplete = uploads.length > 0 && uploads.every((u) => u.status === 'complete');
+  const hasErrors = uploads.some((u) => u.status === 'error');
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <header className="border-b bg-card p-6">
-        <h1 className="text-2xl font-bold">Upload Book</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Upload PDF or EPUB files for the library
-        </p>
+      <header className="border-b bg-card p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Upload Books</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Upload PDF or EPUB files to the library
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/')}>
+            Cancel
+          </Button>
+        </div>
       </header>
 
-      {/* Form */}
+      {/* Content */}
       <main className="flex-1 overflow-auto p-6">
-        <div className="mx-auto max-w-2xl">
+        <div className="mx-auto max-w-4xl space-y-6">
+          {/* Error Banner */}
           {error && (
-            <div className="mb-6 rounded-md bg-destructive/10 p-4 text-sm text-destructive">
+            <div className="flex items-center gap-3 rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="h-5 w-5" />
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* File Drop Zone */}
-            <div>
-              <Label>Book File</Label>
-              <div
-                {...getRootProps()}
-                className={`mt-2 flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors ${
-                  isDragActive
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50'
-                }`}
-              >
-                <input {...getInputProps()} />
-                {file ? (
-                  <div className="flex items-center gap-4">
-                    <FileText className="h-12 w-12 text-primary" />
-                    <div>
-                      <p className="font-medium">{file.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(file.size / (1024 * 1024)).toFixed(2)} MB
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        clearFile();
-                      }}
-                      className="ml-4 rounded-full p-1 hover:bg-muted"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <Upload className="h-12 w-12 text-muted-foreground" />
-                    <p className="mt-4 text-sm text-muted-foreground">
-                      {isDragActive
-                        ? 'Drop the file here...'
-                        : 'Drag and drop a PDF or EPUB file here, or click to select'}
-                    </p>
-                  </>
-                )}
+          {/* Success Banner */}
+          {allComplete && (
+            <div className="flex items-center gap-3 rounded-lg bg-green-50 p-4 text-sm text-green-700">
+              <CheckCircle className="h-5 w-5" />
+              All files uploaded successfully!
+              <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
+                Go to Library
+              </Button>
+            </div>
+          )}
+
+          {/* Drop Zone */}
+          <div
+            {...getRootProps()}
+            className={`relative cursor-pointer rounded-xl border-2 border-dashed p-8 transition-all ${
+              isDragActive
+                ? 'border-primary bg-primary/5 scale-[1.02]'
+                : 'border-border hover:border-primary/50 hover:bg-muted/30'
+            }`}
+          >
+            <input {...getInputProps()} />
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                <Upload className="h-8 w-8 text-primary" />
+              </div>
+              <p className="mt-4 text-lg font-medium">
+                {isDragActive ? 'Drop files here...' : 'Drag and drop files here'}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                or click to select multiple PDF or EPUB files
+              </p>
+              <div className="mt-4 flex gap-2">
+                <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">PDF</span>
+                <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">EPUB</span>
               </div>
             </div>
+          </div>
 
-            {/* Title */}
-            <div>
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter book title"
-                required
-              />
-            </div>
+          {/* Upload Queue */}
+          {uploads.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Upload Queue ({uploads.length})</h2>
+                {hasPendingUploads && (
+                  <Button onClick={handleUploadAll} disabled={!!currentUploadId}>
+                    {currentUploadId ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      'Upload All'
+                    )}
+                  </Button>
+                )}
+              </div>
 
-            {/* Authors */}
-            <div>
-              <Label htmlFor="authors">Author(s)</Label>
-              <Input
-                id="authors"
-                value={authors}
-                onChange={(e) => setAuthors(e.target.value)}
-                placeholder="Enter author name(s)"
-                required
-              />
-            </div>
+              <div className="space-y-3">
+                {uploads.map((upload) => (
+                  <div
+                    key={upload.id}
+                    className={`rounded-xl border bg-card p-4 shadow-sm ${
+                      upload.status === 'error' ? 'border-destructive' : ''
+                    } ${upload.status === 'complete' ? 'border-green-500' : ''}`}
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* File Icon */}
+                      <FileIcon type={upload.file.type} />
 
-            {/* Class Grade */}
-            <div>
-              <Label htmlFor="classGrade">Class</Label>
-              <Select value={classGrade} onValueChange={setClassGrade} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select class" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLASS_GRADE_OPTIONS.map((grade) => (
-                    <SelectItem key={grade} value={grade}>
-                      {grade}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                      {/* File Info & Form */}
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium">{upload.file.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatFileSize(upload.file.size)}
+                          </p>
+                        </div>
 
-            {/* Submit */}
-            <div className="flex gap-4">
-              <Button type="submit" className="flex-1" disabled={isLoading || !file}>
-                {isLoading ? 'Uploading...' : 'Upload Book'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate('/')}
-              >
-                Cancel
-              </Button>
+                        {upload.status === 'error' && (
+                          <p className="text-sm text-destructive">{upload.error}</p>
+                        )}
+
+                        {upload.status !== 'complete' && upload.status !== 'uploading' && (
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <div>
+                              <Input
+                                placeholder="Title *"
+                                value={upload.title}
+                                onChange={(e) => updateUpload(upload.id, { title: e.target.value })}
+                                className="h-9"
+                              />
+                            </div>
+                            <div>
+                              <Input
+                                placeholder="Author(s) *"
+                                value={upload.authors}
+                                onChange={(e) => updateUpload(upload.id, { authors: e.target.value })}
+                                className="h-9"
+                              />
+                            </div>
+                            <Select
+                              value={upload.classGrade}
+                              onValueChange={(value) => updateUpload(upload.id, { classGrade: value })}
+                            >
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Class *" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {CLASS_GRADE_OPTIONS.map((grade) => (
+                                  <SelectItem key={grade} value={grade}>
+                                    {grade}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {/* Progress Bar */}
+                        {(upload.status === 'uploading' || upload.status === 'complete') && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span>
+                                {upload.status === 'complete' ? 'Complete' : 'Uploading...'}
+                              </span>
+                              <span>{upload.progress}%</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-muted">
+                              <div
+                                className={`h-2 rounded-full transition-all ${
+                                  upload.status === 'complete' ? 'bg-green-500' : 'bg-primary'
+                                }`}
+                                style={{ width: `${upload.progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2">
+                        {upload.status === 'pending' && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleUpload(upload.id)}
+                            disabled={
+                              !upload.title ||
+                              !upload.authors ||
+                              !upload.classGrade ||
+                              !!currentUploadId
+                            }
+                          >
+                            Upload
+                          </Button>
+                        )}
+                        {upload.status === 'uploading' && (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        )}
+                        {upload.status === 'complete' && (
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                        )}
+                        {upload.status === 'error' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleUpload(upload.id)}
+                          >
+                            Retry
+                          </Button>
+                        )}
+                        {(upload.status === 'pending' || upload.status === 'error') && (
+                          <button
+                            onClick={() => removeFile(upload.id)}
+                            className="rounded-full p-1 hover:bg-muted"
+                          >
+                            <X className="h-5 w-5 text-muted-foreground" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </form>
+          )}
+
+          {/* Empty State */}
+          {uploads.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <BookOpen className="h-16 w-16 text-muted-foreground/30" />
+              <p className="mt-4 text-lg font-medium">No files queued</p>
+              <p className="text-sm text-muted-foreground">
+                Drop some files above to start uploading
+              </p>
+            </div>
+          )}
         </div>
       </main>
     </div>

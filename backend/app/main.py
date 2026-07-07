@@ -4,12 +4,23 @@ BookLore FastAPI Application Entry Point.
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
+from app.core.exceptions import (
+    BookLoreException,
+    UnauthorizedException,
+    ForbiddenException,
+    NotFoundException,
+    ConflictException,
+    ValidationException,
+    RateLimitException,
+    ServiceUnavailableException,
+    DatabaseException
+)
 from app.api.v1.router import api_router
 
 
@@ -49,17 +60,49 @@ app.add_middleware(
 )
 
 
-# Global exception handler
+# Global exception handler for application-specific exceptions
+@app.exception_handler(BookLoreException)
+async def booklore_exception_handler(request: Request, exc: BookLoreException):
+    """Handle BookLore application exceptions."""
+    logger.warning(f"Application exception: {exc.code} - {exc.message}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": exc.code,
+                "message": exc.message
+            }
+        }
+    )
+
+
+# Global exception handler for unhandled exceptions
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Handle unhandled exceptions."""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
-        status_code=500,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "error": {
                 "code": "INTERNAL_ERROR",
                 "message": "An unexpected error occurred"
+            }
+        }
+    )
+
+
+# Handler for database connection errors
+@app.exception_handler(ConnectionRefusedError)
+async def connection_refused_handler(request: Request, exc: ConnectionRefusedError):
+    """Handle database connection errors."""
+    logger.error(f"Database connection refused: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "error": {
+                "code": "DATABASE_UNAVAILABLE",
+                "message": "Database service is temporarily unavailable"
             }
         }
     )

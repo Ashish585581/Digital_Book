@@ -31,7 +31,9 @@ class BookRepository(BaseRepository[Book]):
         limit: int = 20,
         class_grade: str | None = None,
         book_type: str | None = None,
-        search: str | None = None
+        search: str | None = None,
+        library_type: str | None = None,
+        featured: bool | None = None
     ) -> tuple[list[Book], int]:
         """
         Get books with pagination and filters.
@@ -57,6 +59,16 @@ class BookRepository(BaseRepository[Book]):
                     func.lower(BookMetadata.title).like(search_term),
                     func.lower(BookMetadata.authors).like(search_term)
                 )
+            )
+
+        if library_type:
+            query = query.join(Book.book_metadata).where(
+                BookMetadata.library_type == library_type
+            )
+
+        if featured is not None:
+            query = query.join(Book.book_metadata).where(
+                BookMetadata.is_featured == featured
             )
 
         # Get total count
