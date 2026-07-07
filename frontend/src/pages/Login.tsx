@@ -1,83 +1,39 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { BookOpen } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore';
-import { Button } from '@/components/common/Button';
-import { Input } from '@/components/common/Input';
-import { Label } from '@/components/common/Label';
+import { BackgroundDecoration } from '@/components/auth/BackgroundDecoration';
+import { Navbar } from '@/components/auth/Navbar';
+import { Hero } from '@/components/auth/Hero';
+import { LoginCard } from '@/components/auth/LoginCard';
 
 export function LoginPage() {
-  const navigate = useNavigate();
-  const { login, isLoading, error } = useAuthStore();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await login(username, password);
-      navigate('/');
-    } catch {
-      // Error is handled in store
-    }
-  };
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-md space-y-8 rounded-lg border bg-card p-8 shadow-lg">
-        {/* Logo */}
-        <div className="flex flex-col items-center">
-          <BookOpen className="h-12 w-12 text-primary" />
-          <h1 className="mt-4 text-2xl font-bold">BookLore</h1>
-          <p className="text-sm text-muted-foreground">Digital Library Platform</p>
+    <div className="min-h-screen bg-[#F8FAFC]">
+      <BackgroundDecoration />
+      <Navbar />
+
+      {/* Main content */}
+      <main className="relative z-10 flex min-h-[calc(100vh-73px)]">
+        {/* Left side - Hero content (55%) */}
+        <div className="hidden lg:flex lg:w-[55%] flex-col">
+          <Hero />
         </div>
 
-        {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
+        {/* Right side - Login card (45%) */}
+        <div className="w-full lg:w-[45%] flex items-center justify-center p-6 lg:p-12">
+          <LoginCard />
+        </div>
+      </main>
 
-          <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              type="text"
-              placeholder="Enter your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              autoComplete="username"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </div>
-
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Signing in...' : 'Sign In'}
-          </Button>
-        </form>
-
-        {/* Register link */}
-        <p className="text-center text-sm text-muted-foreground">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-primary hover:underline">
-            Contact your administrator
-          </Link>
-        </p>
+      {/* Mobile hero - shown below login on small screens */}
+      <div className="lg:hidden relative z-10 pb-12 px-6">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold">
+            <span className="text-emerald-600">Read.</span>{' '}
+            <span className="text-slate-800">Learn.</span>{' '}
+            <span className="text-amber-500">Grow.</span>
+          </h1>
+          <p className="text-slate-500 mt-3">
+            Your digital library for endless knowledge and discovery.
+          </p>
+        </div>
       </div>
     </div>
   );
